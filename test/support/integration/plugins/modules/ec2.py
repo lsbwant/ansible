@@ -1,9 +1,18 @@
 #!/usr/bin/python
 # This file is part of Ansible
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
-
-from __future__ import absolute_import, division, print_function
-__metaclass__ = type
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
                     'status': ['stableinterface'],
@@ -16,19 +25,12 @@ module: ec2
 short_description: create, terminate, start or stop an instance in ec2
 description:
     - Creates or terminates ec2 instances.
-    - >
-      Note: This module uses the older boto Python module to interact with the EC2 API.
-      M(ec2) will still receive bug fixes, but no new features.
-      Consider using the M(ec2_instance) module instead.
-      If M(ec2_instance) does not support a feature you need that is available in M(ec2), please
-      file a feature request.
 version_added: "0.9"
 options:
   key_name:
     description:
-      - Key pair to use on the instance.
-      - The SSH key must already exist in AWS in order to use this argument.
-      - Keys can be created / deleted using the M(ec2_key) module.
+      - key pair to use on the instance. The SSH key must exist on AWS in order to use this argument. If you want to generate keys from Ansible,
+        take a look at `ec2_key` module.
     aliases: ['keypair']
     type: str
   id:
@@ -43,13 +45,19 @@ options:
       - Security group (or list of groups) to use with the instance.
     aliases: [ 'groups' ]
     type: list
-    elements: str
   group_id:
     version_added: "1.1"
     description:
       - Security group id (or list of ids) to use with the instance.
     type: list
-    elements: str
+  region:
+    version_added: "1.2"
+    description:
+      - The AWS region to use.  Must be specified if ec2_url is not used.
+      - If not specified then the value of the C(AWS_REGION) or C(EC2_REGION) environment variable, if any, is used.
+      - See U(https://docs.aws.amazon.com/general/latest/gr/rande.html#ec2_region).
+    aliases: [ 'aws_region', 'ec2_region' ]
+    type: str
   zone:
     version_added: "1.2"
     description:
@@ -59,13 +67,12 @@ options:
   instance_type:
     description:
       - Instance type to use for the instance, see U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-types.html).
-      - Required when creating a new instance.
+    required: true
     type: str
-    aliases: ['type']
   tenancy:
     version_added: "1.9"
     description:
-      - An instance with a tenancy of C(dedicated) runs on single-tenant hardware and can only be launched into a VPC.
+      - An instance with a tenancy of "dedicated" runs on single-tenant hardware and can only be launched into a VPC.
       - Note that to use dedicated tenancy you MUST specify a I(vpc_subnet_id) as well.
       - Dedicated tenancy is not available for EC2 "micro" instances.
     default: default
@@ -80,30 +87,29 @@ options:
   spot_type:
     version_added: "2.0"
     description:
-      - The type of spot request.
-      - After being interrupted a C(persistent) spot instance will be started once there is capacity to fill the request again.
+      - Type of spot request; one of "one-time" or "persistent". Defaults to "one-time" if not supplied.
     default: "one-time"
     choices: [ "one-time", "persistent" ]
     type: str
   image:
     description:
        - I(ami) ID to use for the instance.
-       - Required when I(state=present).
+    required: true
     type: str
   kernel:
     description:
-      - Kernel eki to use for the instance.
+      - Kernel I(eki) to use for the instance.
     type: str
   ramdisk:
     description:
-      - Ramdisk eri to use for the instance.
+      - Ramdisk I(eri) to use for the instance.
     type: str
   wait:
     description:
       - Wait for the instance to reach its desired state before returning.
-      - Does not wait for SSH, see the 'wait_for_connection' example for details.
+      - Does not wait for SSH, see 'wait_for_connection' example for details.
     type: bool
-    default: false
+    default: 'no'
   wait_timeout:
     description:
       - How long before wait gives up, in seconds.
@@ -125,7 +131,7 @@ options:
     description:
       - Enable detailed monitoring (CloudWatch) for instance.
     type: bool
-    default: false
+    default: 'no'
   user_data:
     version_added: "0.9"
     description:
@@ -167,19 +173,18 @@ options:
       - "list of instance ids, currently used for states: absent, running, stopped"
     aliases: ['instance_id']
     type: list
-    elements: str
   source_dest_check:
     version_added: "1.6"
     description:
       - Enable or Disable the Source/Destination checks (for NAT instances and Virtual Routers).
-        When initially creating an instance the EC2 API defaults this to C(True).
+        When initially creating an instance the EC2 API defaults this to True.
     type: bool
   termination_protection:
     version_added: "2.0"
     description:
       - Enable or Disable the Termination Protection.
     type: bool
-    default: false
+    default: 'no'
   instance_initiated_shutdown_behavior:
     version_added: "2.2"
     description:
@@ -192,63 +197,24 @@ options:
     version_added: "1.3"
     description:
       - Create, terminate, start, stop or restart instances. The state 'restarted' was added in Ansible 2.2.
-      - When I(state=absent), I(instance_ids) is required.
-      - When I(state=running), I(state=stopped) or I(state=restarted) then either I(instance_ids) or I(instance_tags) is required.
+      - When 'absent', I(instance_ids) is required.
+      - When 'running', 'stopped' and 'restarted', I(instance_ids) or I(instance_tags) is required.
     default: 'present'
     choices: ['absent', 'present', 'restarted', 'running', 'stopped']
     type: str
   volumes:
     version_added: "1.5"
     description:
-      - A list of hash/dictionaries of volumes to add to the new instance.
+      - a list of hash/dictionaries of volumes to add to the new instance; '[{"key":"value", "key":"value"}]'; keys allowed
+        are - device_name (str; required), delete_on_termination (bool; False), ephemeral (str),
+        encrypted (bool; False), snapshot (str), volume_type (str), volume_size (int, GiB), iops (int) - iops must be set when
+        volume_type='io1', ephemeral and snapshot are mutually exclusive.
     type: list
-    elements: dict
-    suboptions:
-      device_name:
-        type: str
-        required: true
-        description:
-          - A name for the device (For example C(/dev/sda)).
-      delete_on_termination:
-        type: bool
-        default: false
-        description:
-          - Whether the volume should be automatically deleted when the instance is terminated.
-      ephemeral:
-        type: str
-        description:
-          - Whether the volume should be ephemeral.
-          - Data on ephemeral volumes is lost when the instance is stopped.
-          - Mutually exclusive with the I(snapshot) parameter.
-      encrypted:
-        type: bool
-        default: false
-        description:
-          - Whether the volume should be encrypted using the 'aws/ebs' KMS CMK.
-      snapshot:
-        type: str
-        description:
-          - The ID of an EBS snapshot to copy when creating the volume.
-          - Mutually exclusive with the I(ephemeral) parameter.
-      volume_type:
-        type: str
-        description:
-          - The type of volume to create.
-          - See U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSVolumeTypes.html) for more information on the available volume types.
-      volume_size:
-        type: int
-        description:
-          - The size of the volume (in GiB).
-      iops:
-        type: int
-        description:
-          - The number of IOPS per second to provision for the volume.
-          - Required when I(volume_type=io1).
   ebs_optimized:
     version_added: "1.6"
     description:
-      - Whether instance is using optimized EBS volumes, see U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSOptimized.html).
-    default: false
+      - whether instance is using optimized EBS volumes, see U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSOptimized.html).
+    default: 'no'
     type: bool
   exact_count:
     version_added: "1.5"
@@ -259,31 +225,27 @@ options:
   count_tag:
     version_added: "1.5"
     description:
-      - Used with I(exact_count) to determine how many nodes based on a specific tag criteria should be running.
+      - Used with 'exact_count' to determine how many nodes based on a specific tag criteria should be running.
         This can be expressed in multiple ways and is shown in the EXAMPLES section.  For instance, one can request 25 servers
-        that are tagged with "class=webserver". The specified tag must already exist or be passed in as the I(instance_tags) option.
-    type: raw
+        that are tagged with "class=webserver". The specified tag must already exist or be passed in as the 'instance_tags' option.
   network_interfaces:
     version_added: "2.0"
     description:
       - A list of existing network interfaces to attach to the instance at launch. When specifying existing network interfaces,
-        none of the I(assign_public_ip), I(private_ip), I(vpc_subnet_id), I(group), or I(group_id) parameters may be used. (Those parameters are
+        none of the assign_public_ip, private_ip, vpc_subnet_id, group, or group_id parameters may be used. (Those parameters are
         for creating a new network interface at launch.)
     aliases: ['network_interface']
     type: list
-    elements: str
   spot_launch_group:
     version_added: "2.1"
     description:
-      - Launch group for spot requests, see U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/how-spot-instances-work.html#spot-launch-group).
+      - Launch group for spot request, see U(https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/how-spot-instances-work.html#spot-launch-group).
     type: str
 author:
     - "Tim Gerla (@tgerla)"
     - "Lester Wade (@lwade)"
     - "Seth Vidal (@skvidal)"
-extends_documentation_fragment:
-    - aws
-    - ec2
+extends_documentation_fragment: aws
 '''
 
 EXAMPLES = '''
@@ -750,6 +712,11 @@ def get_instance_info(inst):
                      'groups': dict((group.id, group.name) for group in inst.groups),
                      }
     try:
+        instance_info['spot_instance_request_id'] = getattr(inst, 'spot_instance_request_id')
+    except AttributeError:
+        instance_info['spot_instance_request_id'] = None
+
+    try:
         instance_info['virtualization_type'] = getattr(inst, 'virtualization_type')
     except AttributeError:
         instance_info['virtualization_type'] = None
@@ -1036,6 +1003,7 @@ def create_instances(module, ec2, vpc, override_count=None):
     network_interfaces = module.params.get('network_interfaces')
     spot_launch_group = module.params.get('spot_launch_group')
     instance_initiated_shutdown_behavior = module.params.get('instance_initiated_shutdown_behavior')
+    valid_until = module.params.get('valid_until')
 
     vpc_id = None
     if vpc_subnet_id:
@@ -1252,10 +1220,12 @@ def create_instances(module, ec2, vpc, override_count=None):
                 # Set spot ValidUntil
                 # ValidUntil -> (timestamp). The end date of the request, in
                 # UTC format (for example, YYYY -MM -DD T*HH* :MM :SS Z).
+                params['valid_until'] = valid_until
                 utc_valid_until = (
                     datetime.datetime.utcnow()
                     + datetime.timedelta(seconds=spot_wait_timeout))
-                params['valid_until'] = utc_valid_until.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+                if spot_type == 'one-time':
+                    params['valid_until'] = utc_valid_until.strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
                 res = ec2.request_spot_instances(spot_price, **params)
 
@@ -1398,6 +1368,54 @@ def terminate_instances(module, ec2, instance_ids):
 
     return (changed, instance_dict_array, terminated_instance_ids)
 
+def cancel_spot_requests(module, ec2, spot_request_ids):
+    """
+    Cancel a list of spot requests
+
+    module: Ansible module object
+    ec2: authenticated ec2 connection object
+    spot_request_ids: a list of spot request ids to cancel in the form of
+      [ {id: <inst-id>}, ..]
+
+    Returns a dictionary of instance information
+    about the spot request canceled.
+
+
+    """
+
+    changed = False
+
+    if not isinstance(spot_request_ids, list) or len(spot_request_ids) < 1:
+        module.fail_json(msg='spot_request_ids should be a list of spot_request_ids, aborting')
+
+    spot_request_id_dict_array = []
+    cancelled_spot_request_ids =[]
+    reqs = ec2.get_all_spot_instance_requests()
+    for sirb in reqs:
+        for sir in spot_request_ids:
+            if sir != sirb.id:
+                continue  # this is not our spot instance
+            if sirb.state != 'cancelled':
+                cancelled_spot_request_ids.append(sirb.id)
+                sir_info = {
+                'id': sirb.id,
+                'price': sirb.price,
+                'type': sirb.type,
+                'state': sirb.state,
+                'availability_zone_group': sirb.availability_zone_group,
+                'create_time': sirb.create_time,
+                'instance_id': sirb.instance_id,
+                'valid_until': sirb.valid_until,
+                'launch_group': sirb.launch_group
+                }
+                spot_request_id_dict_array.append(sir_info)
+                try:
+                    ec2.cancel_spot_instance_requests(sirb.id, dry_run=False)
+                except EC2ResponseError as e:
+                    module.fail_json(msg="Unable to cancel c => %s: %s" % (e.error_code, e.error_message))
+                changed = True
+
+    return (changed, spot_request_id_dict_array, cancelled_spot_request_ids)
 
 def startstop_instances(module, ec2, instance_ids, state, instance_tags):
     """
@@ -1664,22 +1682,23 @@ def main():
             instance_ids=dict(type='list', aliases=['instance_id']),
             source_dest_check=dict(type='bool', default=None),
             termination_protection=dict(type='bool', default=None),
-            state=dict(default='present', choices=['present', 'absent', 'running', 'restarted', 'stopped']),
+            state=dict(default='present', choices=['present', 'absent', 'running', 'restarted', 'stopped', 'absent_spot_request']),
             instance_initiated_shutdown_behavior=dict(default='stop', choices=['stop', 'terminate']),
             exact_count=dict(type='int', default=None),
             count_tag=dict(type='raw'),
             volumes=dict(type='list'),
             ebs_optimized=dict(type='bool', default=False),
             tenancy=dict(default='default', choices=['default', 'dedicated']),
-            network_interfaces=dict(type='list', aliases=['network_interface'])
+            network_interfaces=dict(type='list', aliases=['network_interface']),
+            valid_until=dict(),
+            spot_request_ids=dict(type='list', aliases=['spot_request_id'])
         )
     )
 
     module = AnsibleModule(
         argument_spec=argument_spec,
         mutually_exclusive=[
-            # Can be uncommented when we finish the deprecation cycle.
-            # ['group', 'group_id'],
+            ['group_name', 'group_id'],
             ['exact_count', 'count'],
             ['exact_count', 'state'],
             ['exact_count', 'instance_ids'],
@@ -1690,12 +1709,6 @@ def main():
             ['network_interfaces', 'vpc_subnet_id'],
         ],
     )
-
-    if module.params.get('group') and module.params.get('group_id'):
-        module.deprecate(
-            msg='Support for passing both group and group_id has been deprecated. '
-            'Currently group_id is ignored, in future passing both will result in an error',
-            version='2.14')
 
     if not HAS_BOTO:
         module.fail_json(msg='boto required for this module')
@@ -1724,6 +1737,12 @@ def main():
             module.fail_json(msg='instance_ids list is required for absent state')
 
         (changed, instance_dict_array, new_instance_ids) = terminate_instances(module, ec2, instance_ids)
+
+    elif state == 'absent_spot_request':
+        spot_request_ids = module.params['spot_request_ids']
+        if not spot_request_ids:
+            module.fail_json(msg='spot_request_ids list is required for absent_spot_request state')
+        (changed, instance_dict_array, new_instance_ids) = cancel_spot_requests(module, ec2, spot_request_ids)
 
     elif state in ('running', 'stopped'):
         instance_ids = module.params.get('instance_ids')
